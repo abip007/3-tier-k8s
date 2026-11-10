@@ -1,0 +1,63 @@
+# React + nginx frontend. nginx proxies /api, /admin, /static to the backend Service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: result-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: frontend     # real image set in kustomization.yaml
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            # nginx's resolver ignores search domains -> use the FQDN.
+            - name: BACKEND_URL
+              value: "backend.result-app.svc.cluster.local:8000"
+            # Resolved once at nginx startup, so no hard-coded kube-dns IP.
+            - name: NGINX_RESOLVER
+              value: "kube-dns.kube-system.svc.cluster.local"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+---
+# Browser entrypoint. On Docker Desktop a LoadBalancer is published on localhost:8080.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: result-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

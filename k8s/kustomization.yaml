@@ -1,0 +1,33 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: result-app
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - backend.yaml
+  - frontend.yaml
+
+# Secrets are generated from local, git-ignored env files.
+# Create them with scripts/gen-secrets.sh (or copy the *.env.example files).
+generatorOptions:
+  disableNameSuffixHash: true
+secretGenerator:
+  - name: django-secret
+    envs:
+      - secrets/django.env
+  - name: postgres-credentials
+    envs:
+      - secrets/postgres.env
+
+# Placeholder image names in the manifests -> published Docker Hub images.
+images:
+  - name: backend
+    newName: docker.io/abip007/result-backend
+    newTag: "1.0"
+  - name: frontend
+    newName: docker.io/abip007/result-frontend
+    newTag: "1.0"

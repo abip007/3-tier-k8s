@@ -1,0 +1,105 @@
+# Django backend: one-off migration Job + Deployment + internal ClusterIP Service.
+---
+# Runs `migrate` and creates the teacher account (entrypoint.sh, RUN_MIGRATIONS=true),
+# then exits. Job pod templates are immutable: delete the Job before re-applying.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: django-migrate
+  namespace: result-app
+spec:
+  backoffLimit: 10          # retries while PostgreSQL is still starting
+  template:
+    metadata:
+      labels:
+        app: django-migrate
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          envFrom:
+            - configMapRef:
+                name: backend-config
+          command: ["sh", "-c", "until pg_isready -h \"$POSTGRES_HOST\" -p \"$POSTGRES_PORT\"; do echo waiting for postgres; sleep 2; done"]
+      containers:
+        - name: migrate
+          image: backend      # real image set in kustomization.yaml
+          imagePullPolicy: IfNotPresent
+          args: ["echo", "Migrations and teacher account done."]
+          env:
+            - name: RUN_MIGRATIONS
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: django-secret
+            - secretRef:
+                name: postgres-credentials
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: result-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: backend      # real image set in kustomization.yaml
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: RUN_MIGRATIONS
+              value: "false"  # the Job owns migrations
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: django-secret
+            - secretRef:
+                name: postgres-credentials
+          resources:
+            requests:
+              cpu: 50m
+              memory: 180Mi
+            limits:
+              memory: 400Mi
+          # /api/health/ checks both PostgreSQL and Redis -> 503 if either is down.
+          readinessProbe:
+            httpGet:
+              path: /api/health/
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:          # don't restart Django just because a dependency is down
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: result-app
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

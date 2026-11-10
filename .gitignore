@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+backend/staticfiles/
+frontend/node_modules/
+frontend/dist/
+
+
+# Kubernetes secrets (never commit)
+k8s/secrets/*.env
+
+# Local helper scripts and deployment evidence (not published)
+scripts/
+evidence/
+docker-compose.yml
+backend/.env.example

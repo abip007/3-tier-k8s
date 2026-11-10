@@ -1,0 +1,16 @@
+# Non-sensitive backend settings. Credentials live in Secrets (see secrets/).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: result-app
+data:
+  # Headless Service DNS names (StatefulSet network identity).
+  POSTGRES_HOST: "postgres.result-app.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  REDIS_URL: "redis://redis.result-app.svc.cluster.local:6379/0"
+  RESULT_CACHE_TTL: "300"
+  DJANGO_DEBUG: "false"
+  DJANGO_ALLOWED_HOSTS: "*"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+  LOG_LEVEL: "INFO"
